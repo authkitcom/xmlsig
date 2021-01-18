@@ -4,13 +4,23 @@ package xmlsig
 import (
 	"crypto"
 	"crypto/rand"
+	"crypto/rsa"
 	"errors"
 	// import supported crypto hash function
 	_ "crypto/sha1"
 	_ "crypto/sha256"
-	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+)
+
+const (
+	SignatureAlgorithmDsigRSASHA1   = "http://www.w3.org/2000/09/xmldsig#rsa-sha1"
+	SignatureAlgorithmDsigRSASHA256 = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"
+)
+
+const (
+	DigestAlgorithmDsigRSASHA1 = "http://www.w3.org/2000/09/xmldsig#rsa-sha1"
+	DigestAlgorithmDsigSHA256  = "http://www.w3.org/2001/04/xmlenc#sha256"
 )
 
 // Signer is used to create a Signature for the provided object.
@@ -21,10 +31,10 @@ type Signer interface {
 }
 
 type signer struct {
-	cert      string
+	cert      *x509.Certificate
+	key       *rsa.PrivateKey
 	sigAlg    *algorithm
 	digestAlg *algorithm
-	key       crypto.Signer
 }
 
 type algorithm struct {
@@ -43,29 +53,15 @@ func pickSignatureAlgorithm(certType x509.PublicKeyAlgorithm, alg string) (*algo
 	case x509.RSA:
 		switch alg {
 		case "":
-			alg = "http://www.w3.org/2000/09/xmldsig#rsa-sha1"
+			alg = SignatureAlgorithmDsigRSASHA1
 			hash = crypto.SHA1
-		case "http://www.w3.org/2000/09/xmldsig#rsa-sha1":
+		case SignatureAlgorithmDsigRSASHA1:
 			hash = crypto.SHA1
-		case "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256":
+		case SignatureAlgorithmDsigRSASHA256:
 			hash = crypto.SHA256
 		default:
 			return nil, errors.New("xmlsig does not currently the specfied algorithm for RSA certificates")
 		}
-	case x509.DSA:
-		switch alg {
-		case "":
-			alg = "http://www.w3.org/2000/09/xmldsig#dsa-sha1"
-			hash = crypto.SHA1
-		case "http://www.w3.org/2000/09/xmldsig#dsa-sha1":
-			hash = crypto.SHA1
-		case "http://www.w3.org/2009/xmldsig11#dsa-sha256":
-			hash = crypto.SHA256
-		default:
-			return nil, errors.New("xmlsig does not currently the specfied algorithm for DSA certificates")
-		}
-	case x509.ECDSA:
-		return nil, errors.New("xmlsig does not currently support ECDSA certificates")
 	default:
 		return nil, errors.New("xmlsig needs some work to support your certificate")
 	}
@@ -76,36 +72,29 @@ func pickDigestAlgorithm(alg string) (*algorithm, error) {
 	switch alg {
 	case "":
 		fallthrough
-	case "http://www.w3.org/2000/09/xmldsig#sha1":
+	case DigestAlgorithmDsigRSASHA1:
 		return &algorithm{"http://www.w3.org/2000/09/xmldsig#sha1", crypto.SHA1}, nil
-	case "http://www.w3.org/2001/04/xmlenc#sha256":
+	case DigestAlgorithmDsigSHA256:
 		return &algorithm{"http://www.w3.org/2001/04/xmlenc#sha256", crypto.SHA256}, nil
 	}
 	return nil, errors.New("xmlsig does not support the specified digest algorithm")
 }
 
-// NewSigner creates a new Signer with the certificate.
-func NewSigner(cert tls.Certificate) (Signer, error) {
-	return NewSignerWithOptions(cert, SignerOptions{})
-}
-
 // NewSigner creates a new Signer with the certificate and options
-func NewSignerWithOptions(cert tls.Certificate, options SignerOptions) (Signer, error) {
-	c := cert.Certificate[0]
-	parsedCert, err := x509.ParseCertificate(c)
+func NewSigner(cert *x509.Certificate, key *rsa.PrivateKey, options ...SignerOptions) (Signer, error) {
+	opts := SignerOptions{}
+	if len(options) > 0 {
+		opts = options[0]
+	}
+	sigAlg, err := pickSignatureAlgorithm(cert.PublicKeyAlgorithm, opts.SignatureAlgorithm)
 	if err != nil {
 		return nil, err
 	}
-	sigAlg, err := pickSignatureAlgorithm(parsedCert.PublicKeyAlgorithm, options.SignatureAlgorithm)
+	digestAlg, err := pickDigestAlgorithm(opts.DigestAlgorithm)
 	if err != nil {
 		return nil, err
 	}
-	digestAlg, err := pickDigestAlgorithm(options.DigestAlgorithm)
-	if err != nil {
-		return nil, err
-	}
-	k := cert.PrivateKey.(crypto.Signer)
-	return &signer{base64.StdEncoding.EncodeToString(c), sigAlg, digestAlg, k}, nil
+	return &signer{cert, key, sigAlg, digestAlg}, nil
 }
 
 func (s *signer) Algorithm() string {
@@ -137,7 +126,7 @@ func (s *signer) CreateSignature(data interface{}) (*Signature, error) {
 		return nil, err
 	}
 	signature.SignatureValue = sig
-	x509Data := &X509Data{X509Certificate: s.cert}
+	x509Data := &X509Data{X509Certificate: base64.StdEncoding.EncodeToString(s.cert.Raw)}
 	signature.KeyInfo.X509Data = x509Data
 	return signature, nil
 }

@@ -1,1 +1,5 @@
-module github.com/amdonov/xmlsig
+module github.com/authkitcom/xmlsig
+
+go 1.15
+
+require github.com/stretchr/testify v1.7.0
