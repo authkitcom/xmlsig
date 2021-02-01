@@ -5,6 +5,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"fmt"
 	"github.com/stretchr/testify/assert"
 	"math/big"
 	"testing"
@@ -16,7 +17,23 @@ type Dummy struct {
 	Value2 int
 }
 
-func TestSigner_Sign(t *testing.T) {
+type signatureAlgorithm struct {
+	algorithm string
+	digest    string
+}
+
+var signatureAlgorithms = []signatureAlgorithm{
+	{
+		algorithm: SignatureAlgorithmDsigRSASHA1,
+		digest:    DigestAlgorithmDsigRSASHA1,
+	},
+	{
+		algorithm: SignatureAlgorithmDsigRSASHA256,
+		digest:    DigestAlgorithmDsigSHA256,
+	},
+}
+
+func TestSigner_CreateSignature_VerifySignature(t *testing.T) {
 
 	type s struct {
 		input  interface{}
@@ -37,28 +54,37 @@ func TestSigner_Sign(t *testing.T) {
 				Value1: "test-value",
 				Value2: 12345678,
 			},
-			assert: func(got *Signature, err error) {
-				assert.Nil(t, err)
-				assert.NotNil(t, got)
-			},
 		},
 	}
 
-	for k, v := range cases {
-		t.Run(k, func(t *testing.T) {
+	for _, a := range signatureAlgorithms {
+		for k, v := range cases {
+			t.Run(fmt.Sprintf("%s-%s-%s", a.algorithm, a.digest, k), func(t *testing.T) {
 
-			unit, err := NewSigner(cert, key, SignerOptions{
-				SignatureAlgorithm: SignatureAlgorithmDsigRSASHA256,
-				DigestAlgorithm:    DigestAlgorithmDsigSHA256,
+				unit, err := NewSigner(cert, key, SignerOptions{
+					SignatureAlgorithm: a.algorithm,
+					DigestAlgorithm:    a.digest,
+				})
+
+				check(err)
+
+				got, err := unit.CreateSignature(v.input)
+
+				assert.Nil(t, err)
+				assert.NotNil(t, got)
+
+				unit2, err := NewVerifier(cert, SignerOptions{
+					SignatureAlgorithm: a.algorithm,
+					DigestAlgorithm:    a.digest,
+				})
+
+				got2, err := unit2.VerifySignature(v.input, got)
+
+				assert.True(t, got2)
+				assert.Nil(t, err)
+
 			})
-
-			check(err)
-
-			got, err := unit.CreateSignature(v.input)
-
-			v.assert(got, err)
-
-		})
+		}
 	}
 
 }

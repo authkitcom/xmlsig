@@ -30,9 +30,21 @@ type Signer interface {
 	Algorithm() string
 }
 
+type Verifier interface {
+	Verify([]byte, *Signature) (bool, error)
+	VerifySignature(interface{}, *Signature) (bool, error)
+	Algorithm() string
+}
+
 type signer struct {
 	cert      *x509.Certificate
 	key       *rsa.PrivateKey
+	sigAlg    *algorithm
+	digestAlg *algorithm
+}
+
+type verifier struct {
+	cert      *x509.Certificate
 	sigAlg    *algorithm
 	digestAlg *algorithm
 }
@@ -114,7 +126,7 @@ func (s *signer) CreateSignature(data interface{}) (*Signature, error) {
 		signature.SignedInfo.Reference.URI = "#" + id
 	}
 	// calculate the digest
-	digest := s.digest(canonData)
+	digest := digest(s.digestAlg, canonData)
 	signature.SignedInfo.Reference.DigestValue = digest
 	// canonicalize the SignedInfo
 	canonData, _, err = canonicalize(signature.SignedInfo)
@@ -142,6 +154,58 @@ func (s *signer) Sign(data []byte) (string, error) {
 	return base64.StdEncoding.EncodeToString(sig), nil
 }
 
+// NewVerifier creates a new Signer with the certificate and options
+func NewVerifier(cert *x509.Certificate, options ...SignerOptions) (Verifier, error) {
+	opts := SignerOptions{}
+	if len(options) > 0 {
+		opts = options[0]
+	}
+	sigAlg, err := pickSignatureAlgorithm(cert.PublicKeyAlgorithm, opts.SignatureAlgorithm)
+	if err != nil {
+		return nil, err
+	}
+	digestAlg, err := pickDigestAlgorithm(opts.DigestAlgorithm)
+	if err != nil {
+		return nil, err
+	}
+	return &verifier{cert, sigAlg, digestAlg}, nil
+}
+
+func (s *verifier) Algorithm() string {
+	return s.sigAlg.name
+}
+
+func (s *verifier) VerifySignature(data interface{}, signature *Signature) (bool, error) {
+	// canonicalize the Item
+	canonData, _, err := canonicalize(data)
+	if err != nil {
+		return false, err
+	}
+	return s.Verify(canonData, signature)
+}
+
+// TODO - Check mismatch of digest and signature methods
+func (s *verifier) Verify(data []byte, signature *Signature) (bool, error) {
+	h := s.sigAlg.hash.New()
+	h.Write(data)
+	digestSum := h.Sum(nil)
+	if base64.StdEncoding.EncodeToString(digestSum) != signature.SignedInfo.Reference.DigestValue {
+		return false, nil
+	}
+	canonData, _, err := canonicalize(signature.SignedInfo)
+	if err != nil {
+		return false, err
+	}
+	h = s.sigAlg.hash.New()
+	h.Write(canonData)
+	sigSum := h.Sum(nil)
+	sig, err := base64.StdEncoding.DecodeString(signature.SignatureValue)
+	if err != nil {
+		return false, err
+	}
+	return rsa.VerifyPKCS1v15(s.cert.PublicKey.(*rsa.PublicKey), s.digestAlg.hash, sigSum, sig) == nil, nil
+}
+
 func newSignature() *Signature {
 	signature := &Signature{}
 	signature.SignedInfo.CanonicalizationMethod.Algorithm =
@@ -152,8 +216,8 @@ func newSignature() *Signature {
 	return signature
 }
 
-func (s *signer) digest(data []byte) string {
-	h := s.digestAlg.hash.New()
+func digest(digestAlg *algorithm, data []byte) string {
+	h := digestAlg.hash.New()
 	h.Write(data)
 	sum := h.Sum(nil)
 	return base64.StdEncoding.EncodeToString(sum)
