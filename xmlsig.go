@@ -59,6 +59,13 @@ type SignerOptions struct {
 	DigestAlgorithm    string
 }
 
+type VerifierOptions struct {
+	SignatureAlgorithm string
+	DigestAlgorithm    string
+	// If specified, is compared against the certificate data for equality
+	X509Data string
+}
+
 func pickSignatureAlgorithm(certType x509.PublicKeyAlgorithm, alg string) (*algorithm, error) {
 	var hash crypto.Hash
 	switch certType {
@@ -155,10 +162,15 @@ func (s *signer) Sign(data []byte) (string, error) {
 }
 
 // NewVerifier creates a new Signer with the certificate and options
-func NewVerifier(cert *x509.Certificate, options ...SignerOptions) (Verifier, error) {
-	opts := SignerOptions{}
+func NewVerifier(cert *x509.Certificate, options ...VerifierOptions) (Verifier, error) {
+	opts := VerifierOptions{}
 	if len(options) > 0 {
 		opts = options[0]
+	}
+	if opts.X509Data != "" {
+		if base64.StdEncoding.EncodeToString(cert.Raw) != opts.X509Data {
+			return nil, errors.New("certificate mismatch")
+		}
 	}
 	sigAlg, err := pickSignatureAlgorithm(cert.PublicKeyAlgorithm, opts.SignatureAlgorithm)
 	if err != nil {

@@ -73,15 +73,41 @@ func TestSigner_CreateSignature_VerifySignature(t *testing.T) {
 				assert.Nil(t, err)
 				assert.NotNil(t, got)
 
-				unit2, err := NewVerifier(cert, SignerOptions{
+				unit2, err := NewVerifier(cert, VerifierOptions{
 					SignatureAlgorithm: a.algorithm,
 					DigestAlgorithm:    a.digest,
 				})
+
+				check(err)
 
 				got2, err := unit2.VerifySignature(v.input, got)
 
 				assert.True(t, got2)
 				assert.Nil(t, err)
+
+				unit3, err := NewVerifier(cert, VerifierOptions{
+					SignatureAlgorithm: a.algorithm,
+					DigestAlgorithm:    a.digest,
+					X509Data:           got.KeyInfo.X509Data.X509Certificate,
+				})
+
+				check(err)
+
+				assert.Nil(t, err)
+
+				got3, err := unit3.VerifySignature(v.input, got)
+
+				assert.True(t, got3)
+				assert.Nil(t, err)
+
+				unit4, err := NewVerifier(cert, VerifierOptions{
+					SignatureAlgorithm: a.algorithm,
+					DigestAlgorithm:    a.digest,
+					X509Data:           "invalid",
+				})
+
+				assert.Nil(t, unit4)
+				assert.EqualError(t, err, "certificate mismatch")
 
 			})
 		}
