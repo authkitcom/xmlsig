@@ -24,6 +24,8 @@ func canonicalize(data interface{}) ([]byte, string, error) {
 		return nil, "", err
 	}
 	encoder.Flush()
+	//grpc call to canonicalize with the buffer as xml data
+
 	// read it back in
 	decoder := xml.NewDecoder(bytes.NewReader(buffer.Bytes()))
 	namespaces := &stack{}

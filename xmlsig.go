@@ -66,6 +66,8 @@ type VerifierOptions struct {
 	X509Data string
 }
 
+var Canonicalize = canonicalize
+
 func pickSignatureAlgorithm(certType x509.PublicKeyAlgorithm, alg string) (*algorithm, error) {
 	var hash crypto.Hash
 	switch certType {
@@ -125,7 +127,7 @@ func (s *signer) CreateSignature(data interface{}) (*Signature, error) {
 	signature.SignedInfo.SignatureMethod.Algorithm = s.sigAlg.name
 	signature.SignedInfo.Reference.DigestMethod.Algorithm = s.digestAlg.name
 	// canonicalize the Item
-	canonData, id, err := canonicalize(data)
+	canonData, id, err := Canonicalize(data)
 	if err != nil {
 		return nil, err
 	}
@@ -135,8 +137,8 @@ func (s *signer) CreateSignature(data interface{}) (*Signature, error) {
 	// calculate the digest
 	digest := digest(s.digestAlg, canonData)
 	signature.SignedInfo.Reference.DigestValue = digest
-	// canonicalize the SignedInfo
-	canonData, _, err = canonicalize(signature.SignedInfo)
+	// Canonicalize the SignedInfo
+	canonData, _, err = Canonicalize(signature.SignedInfo)
 	if err != nil {
 		return nil, err
 	}
@@ -188,8 +190,8 @@ func (s *verifier) Algorithm() string {
 }
 
 func (s *verifier) VerifySignature(data interface{}, signature *Signature) (bool, error) {
-	// canonicalize the Item
-	canonData, _, err := canonicalize(data)
+	// Canonicalize the Item
+	canonData, _, err := Canonicalize(data)
 	if err != nil {
 		return false, err
 	}
@@ -204,7 +206,7 @@ func (s *verifier) Verify(data []byte, signature *Signature) (bool, error) {
 	if base64.StdEncoding.EncodeToString(digestSum) != signature.SignedInfo.Reference.DigestValue {
 		return false, nil
 	}
-	canonData, _, err := canonicalize(signature.SignedInfo)
+	canonData, _, err := Canonicalize(signature.SignedInfo)
 	if err != nil {
 		return false, err
 	}
