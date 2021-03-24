@@ -14,7 +14,7 @@ provided as data. Go's xml encoder generates something that's pretty close,
 but it repeats namespace declarations for each element which isn't correct.
 It also doesn't sort attribute names.
 */
-func canonicalize(data interface{}, inclusiveNamespaces string, propagateDefault bool) ([]byte, string, error) {
+func canonicalize(data interface{}, method string, inclusiveNamespaces string, propagateDefault bool) ([]byte, string, error) {
 	// write the item to a buffer
 	var buffer, out bytes.Buffer
 	writer := bufio.NewWriter(&buffer)
