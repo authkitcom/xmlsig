@@ -127,7 +127,7 @@ func (s *signer) CreateSignature(data interface{}) (*Signature, error) {
 	signature.SignedInfo.SignatureMethod.Algorithm = s.sigAlg.name
 	signature.SignedInfo.Reference.DigestMethod.Algorithm = s.digestAlg.name
 	// canonicalize the Item
-	canonData, id, err := Canonicalize(data)
+	canonData, id, err := Canonicalize(data, signature.SignedInfo.SignatureMethod.Algorithm, false)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +138,7 @@ func (s *signer) CreateSignature(data interface{}) (*Signature, error) {
 	digest := digest(s.digestAlg, canonData)
 	signature.SignedInfo.Reference.DigestValue = digest
 	// Canonicalize the SignedInfo
-	canonData, _, err = Canonicalize(signature.SignedInfo)
+	canonData, _, err = Canonicalize(signature.SignedInfo, signature.SignedInfo.SignatureMethod.Algorithm, false)
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +191,7 @@ func (s *verifier) Algorithm() string {
 
 func (s *verifier) VerifySignature(data interface{}, signature *Signature) (bool, error) {
 	// Canonicalize the Item
-	canonData, _, err := Canonicalize(data)
+	canonData, _, err := Canonicalize(data, s.sigAlg.name, false)
 	if err != nil {
 		return false, err
 	}
@@ -206,7 +206,7 @@ func (s *verifier) Verify(data []byte, signature *Signature) (bool, error) {
 	if base64.StdEncoding.EncodeToString(digestSum) != signature.SignedInfo.Reference.DigestValue {
 		return false, nil
 	}
-	canonData, _, err := Canonicalize(signature.SignedInfo)
+	canonData, _, err := Canonicalize(signature.SignedInfo, s.sigAlg.name, false)
 	if err != nil {
 		return false, err
 	}
