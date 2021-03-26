@@ -191,7 +191,7 @@ func (s *verifier) Algorithm() string {
 
 func (s *verifier) VerifySignature(data interface{}, signature *Signature) (bool, error) {
 	// Canonicalize the Item
-	canonData, _, err := Canonicalize(data, s.sigAlg.name, "",false)
+	canonData, _, err := Canonicalize(data, signature.SignedInfo.CanonicalizationMethod.Algorithm, "",false)
 	if err != nil {
 		return false, err
 	}
@@ -206,7 +206,7 @@ func (s *verifier) Verify(data []byte, signature *Signature) (bool, error) {
 	if base64.StdEncoding.EncodeToString(digestSum) != signature.SignedInfo.Reference.DigestValue {
 		return false, nil
 	}
-	canonData, _, err := Canonicalize(signature.SignedInfo, s.sigAlg.name, "",false)
+	canonData, _, err := Canonicalize(signature.SignedInfo, signature.SignedInfo.CanonicalizationMethod.Algorithm, "",false)
 	if err != nil {
 		return false, err
 	}
